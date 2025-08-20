@@ -1,0 +1,2 @@
+This directory contains static assets that will be served at the root of the application.
+The file `example_welfare_import.xlsx` is an empty Excel template for bulk welfare budget imports. It includes the necessary column headers: `employee_code`, `fname`, `lname`, `employee_position_number`, `department`, `emp_type`, `typeId`, and `limit`. You can download this file from the import page, fill in the details for multiple employees, and then upload it back to the system.

@@ -1,0 +1,13 @@
+/* src/styles/fonts.css */
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
+
+/* ตั้งค่าฟอนต์เริ่มต้นให้ Vuetify */
+:root {
+  --v-font-family: "Kanit", system-ui, -apple-system, "Segoe UI",
+                   Roboto, "Helvetica Neue", Arial, "Noto Sans", "Sarabun",
+                   "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+html, body, #app, .v-application {
+  font-family: var(--v-font-family) !important;
+}
