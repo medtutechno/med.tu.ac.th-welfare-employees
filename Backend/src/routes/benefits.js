@@ -110,9 +110,21 @@ router.post("/claim", authenticateToken, async (req, res) => {
     typeId,
     amount,
     claimfor,
+    claimtype,
     description = "",
+    total_witdraw_history,
+    balance_after_witdraw,
   } = req.body || {};
-  if (!employeeCode || !typeId || !amount || !claimfor || !id_code) {
+  if (
+    !employeeCode ||
+    !typeId ||
+    !amount ||
+    !claimfor ||
+    !claimtype ||
+    !balance_after_witdraw ||
+    !id_code ||
+    !total_witdraw_history
+  ) {
     return res.status(400).json({ message: "missing fields" });
   }
   // Non‑admins cannot claim for others. In this example we do not know the
@@ -124,7 +136,7 @@ router.post("/claim", authenticateToken, async (req, res) => {
     ? req.user.roles
     : [req.user.role];
   if (!userRoles.includes("superadmin") && !userRoles.includes("staff")) {
-    return res.status(403).json({ message: "forbidden" });
+    return res.status(403).json({ message: "Access denied!" });
   }
   try {
     // Check current remaining balance for this welfare type
@@ -156,8 +168,8 @@ router.post("/claim", authenticateToken, async (req, res) => {
     await db.query(
       `
         INSERT INTO welfare_transactions
-          (id_code ,employee_code, welfare_type_id,claimfor, transaction_amount, transaction_date, description, created_by)
-        VALUES (?, ?, ?,?, ?, NOW(), ?, ?)
+          (id_code ,employee_code, welfare_type_id,claimfor, transaction_amount, transaction_date, description, created_by , claimtype_id , balance_after_witdraw,total_witdraw_history)
+        VALUES (?, ?, ?,?, ?, NOW(), ?, ?,?,?,?)
       `,
       [
         id_code,
@@ -167,6 +179,9 @@ router.post("/claim", authenticateToken, async (req, res) => {
         amt,
         description,
         req.user.username || "system",
+        claimtype,
+        balance_after_witdraw,
+        total_witdraw_history,
       ]
     );
     // Return the new remaining balance.
@@ -174,7 +189,9 @@ router.post("/claim", authenticateToken, async (req, res) => {
     return res.json({ ok: true, remaining: newRemaining });
   } catch (err) {
     console.error("claim error:", err);
-    return res.status(500).json({ message: "internal server error" });
+    return res
+      .status(500)
+      .json({ message: "internal server error", error: err.message });
   }
 });
 
@@ -602,6 +619,23 @@ router.get("/types", authenticateToken, async (_req, res) => {
     return res.status(500).json({ message: "internal server error" });
   }
 });
+/**
+ * GET /claimtypes
+ *
+ * Return the list of welfare claim types (id and name). This is useful for
+ * populating selects in the front end. No role restriction applied.
+ */
+router.get("/claimtypes", authenticateToken, async (_req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT id, name FROM claim_type ORDER BY name"
+    );
+    return res.json({ claimtypes: rows });
+  } catch (err) {
+    console.error("claimtypes list error:", err);
+    return res.status(500).json({ message: "internal server error" });
+  }
+});
 
 /**
  * POST /types
@@ -745,9 +779,16 @@ router.get(
   authenticateToken,
   requireRole(["superadmin", "staff"]),
   async (req, res) => {
-    const { employeeCode, name, dateFrom, dateTo } = req.query;
+    const { employeeCode, name, dateFrom, dateTo, selectedType } = req.query;
     const conditions = [];
     const params = [];
+
+    // Filter by welfare type
+    if (selectedType) {
+      conditions.push("wtypes.id = ?");
+      params.push(selectedType);
+    }
+
     // Filter by employee code
     if (employeeCode) {
       conditions.push("wt.employee_code = ?");
@@ -788,10 +829,11 @@ router.get(
       ? "WHERE " + conditions.join(" AND ")
       : "";
     try {
-      const [rows] = await db.query(
-        `
-        SELECT
+      let sql = `
+      SELECT
           wt.id,
+          wt.id_code AS id_code,
+          wt.claimFor AS claimFor,
           wt.employee_code AS employeeCode,
           wt.welfare_type_id AS typeId,
           wt.transaction_amount AS amount,
@@ -799,20 +841,30 @@ router.get(
           wt.description AS description,
           wtypes.name AS typeName,
           ewb.fname AS firstName,
-          ewb.lname AS lastName
+          ewb.lname AS lastName,
+          ewb.employee_position_number,
+          ewb.emp_type,
+          ewb.balance_amount,
+          wt.balance_after_witdraw,
+          wt.total_witdraw_history,
+          ct.name AS claimtype_name,
+          ct.id AS claimtype_id
         FROM welfare_transactions wt
         JOIN welfare_types wtypes ON wt.welfare_type_id = wtypes.id
         -- Join on both employee_code and welfare_type_id to avoid duplicate rows when an employee has multiple welfare balances
         LEFT JOIN employee_welfare_balances ewb
           ON ewb.employee_code = wt.employee_code
          AND ewb.welfare_type_id = wt.welfare_type_id
+         LEFT JOIN claim_type ct ON wt.claimtype_id = ct.id
         ${whereClause}
         ORDER BY wt.transaction_date DESC, wt.id DESC
-      `,
-        params
-      );
+      `;
+      console.log(sql);
+      const [rows] = await db.query(sql, params);
       const results = rows.map((r) => ({
         id: r.id,
+        id_code: r.id_code,
+        claimFor: r.claimFor,
         employeeCode: r.employeeCode,
         typeId: r.typeId,
         typeName: r.typeName,
@@ -821,6 +873,13 @@ router.get(
         description: r.description || "",
         fullName:
           r.firstName && r.lastName ? `${r.firstName} ${r.lastName}` : "",
+        employee_position_number: r.employee_position_number,
+        emp_type: r.emp_type,
+        balance_amount: r.balance_amount,
+        balance_after_witdraw: r.balance_after_witdraw,
+        total_witdraw_history: r.total_witdraw_history,
+        claimtype_id: r.claimtype_id,
+        claimtype_name: r.claimtype_name,
       }));
       return res.json({ results });
     } catch (err) {

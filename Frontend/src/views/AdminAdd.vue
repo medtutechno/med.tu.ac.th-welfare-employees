@@ -48,9 +48,15 @@
             />
           </v-col>
         </v-row>
-        <v-btn color="primary" @click="saveBudget" :disabled="!canSave"
-          >บันทึก</v-btn
+        <v-btn
+          color="primary"
+          :loading="loadingSave"
+          @click="saveBudget"
+          :disabled="!canSave"
         >
+          <span v-if="loadingSave"> กำลังบันทึก... </span>
+          <span v-else> บันทึก </span>
+        </v-btn>
       </v-card-text>
     </v-card>
     <!-- Section to import budgets from an Excel file. -->
@@ -95,6 +101,8 @@ const employeeDetails = ref(null);
 const selectedType = ref(null);
 const limit = ref(null);
 const excelFile = ref(null);
+
+const loadingSave = ref(false);
 
 /**
  * Fetch employees and types from the API. These functions are called
@@ -159,8 +167,15 @@ const canSave = computed(() => {
 
 // Save a new budget for the looked‑up employee. Calls the /benefits/budget
 // endpoint with the employee details, selected welfare type and limit.
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 async function saveBudget() {
   if (!canSave.value) return;
+  loadingSave.value = true;
+  await delay(1500);
+
   try {
     const payload = {
       id_code: employeeDetails.value.id_code,
@@ -180,8 +195,10 @@ async function saveBudget() {
     employeeDetails.value = null;
     selectedType.value = null;
     limit.value = null;
+    loadingSave.value = false;
   } catch (err) {
     const msg = err?.response?.data?.message || "ไม่สามารถบันทึกวงเงินได้";
+    loadingSave.value = false;
     alert(msg);
   }
 }

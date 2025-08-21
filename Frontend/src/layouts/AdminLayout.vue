@@ -105,7 +105,7 @@ const navItems = computed(() => {
       route: "admin-categories",
       icon: "mdi-format-list-bulleted",
     },
-    { title: "ประวัติ", route: "admin-history", icon: "mdi-history" },
+    { title: "ประวัติการเบิก", route: "admin-history", icon: "mdi-history" },
     { title: "ผู้ดูแล", route: "admin-admins", icon: "mdi-account-cog" },
   ];
   const user = currentUser.value;

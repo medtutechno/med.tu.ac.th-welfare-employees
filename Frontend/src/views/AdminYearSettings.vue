@@ -28,10 +28,17 @@
             />
           </v-col>
           <v-col cols="12" sm="3">
-            <v-text-field v-model.number="amount" label="จำนวนเงิน" type="number" suffix="บาท" />
+            <v-text-field
+              v-model.number="amount"
+              label="จำนวนเงิน"
+              type="number"
+              suffix="บาท"
+            />
           </v-col>
           <v-col cols="12" sm="1" class="d-flex align-end">
-            <v-btn color="primary" @click="submitTopup" :disabled="!canTopup">ปรับ</v-btn>
+            <v-btn color="primary" @click="submitTopup" :disabled="!canTopup"
+              >เพิ่มเงิน</v-btn
+            >
           </v-col>
         </v-row>
       </v-card-text>
@@ -62,6 +69,7 @@
             />
           </v-col>
         </v-row>
+        <!-- {{ filteredBudgets }} -->
         <v-data-table
           :headers="headers"
           :items="filteredBudgets"
@@ -74,9 +82,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { currentUser } from '../stores/auth.js';
-import http from '../api/http.js';
+import { ref, onMounted, computed } from "vue";
+import { currentUser } from "../stores/auth.js";
+import http from "../api/http.js";
 
 // Lists of employees and welfare types loaded from the API.
 const employees = ref([]);
@@ -87,10 +95,10 @@ const filteredTypes = computed(() => {
   const user = currentUser.value;
   if (!user) return types.value;
   const roles = Array.isArray(user.roles) ? user.roles : [user.role];
-  if (roles.includes('superadmin')) return types.value;
-  if (roles.includes('staff')) {
+  if (roles.includes("superadmin")) return types.value;
+  if (roles.includes("staff")) {
     const assignments = user.staffAssignments || [];
-    return types.value.filter(t => assignments.includes(t.id));
+    return types.value.filter((t) => assignments.includes(t.id));
   }
   return [];
 });
@@ -109,19 +117,20 @@ const budgets = ref([]);
 
 // Budget filtering state
 const filterTypeId = ref(null);
-const budgetSearch = ref('');
+const budgetSearch = ref("");
 
 // Compute filtered budgets based on selected type and search term
 const filteredBudgets = computed(() => {
   let list = budgets.value;
   if (filterTypeId.value) {
-    list = list.filter(b => b.typeId === filterTypeId.value);
+    list = list.filter((b) => b.typeId === filterTypeId.value);
   }
   const term = budgetSearch.value?.toLowerCase();
   if (term) {
-    list = list.filter(b =>
-      (b.employeeCode && b.employeeCode.toLowerCase().includes(term)) ||
-      (b.employeeName && b.employeeName.toLowerCase().includes(term))
+    list = list.filter(
+      (b) =>
+        (b.employeeCode && b.employeeCode.toLowerCase().includes(term)) ||
+        (b.employeeName && b.employeeName.toLowerCase().includes(term))
     );
   }
   return list;
@@ -129,25 +138,28 @@ const filteredBudgets = computed(() => {
 
 // Table headers for displaying budgets.
 const headers = [
-  { title: 'รหัสพนักงาน', value: 'employeeCode' },
-  { title: 'ชื่อ‑สกุล', value: 'employeeName' },
-  { title: 'ประเภท', value: 'typeName' },
-  { title: 'วงเงิน', value: 'limit' },
-  { title: 'ใช้ไป', value: 'used' },
-  { title: 'คงเหลือ', value: 'remaining' },
+  { title: "ID Card", value: "id_code" },
+  { title: "ชื่อ‑สกุล", value: "employeeName" },
+  { title: "ประเภทสวัสดิการ", value: "typeName" },
+  { title: "ประเภทบุคลากร", value: "emp_type" },
+  { title: "วงเงินรวม", value: "limit" },
+  { title: "เบิกมาแล้ว", value: "used" },
+  { title: "คงเหลือ", value: "remaining" },
 ];
 
 // Determine if the top‑up button should be enabled. Requires an
 // employee, welfare type and a positive amount.
 const canTopup = computed(() => {
-  return selectedEmployees.value.length > 0 && selectedType.value && amount.value > 0;
+  return (
+    selectedEmployees.value.length > 0 && selectedType.value && amount.value > 0
+  );
 });
 
 // Load employees from the API. Each employee record has a code and
 // a name.
 async function fetchEmployees() {
   try {
-    const { data } = await http.get('/benefits/employees');
+    const { data } = await http.get("/benefits/employees");
     employees.value = data.employees || [];
   } catch (_err) {
     employees.value = [];
@@ -157,7 +169,7 @@ async function fetchEmployees() {
 // Load welfare types from the API.
 async function fetchTypes() {
   try {
-    const { data } = await http.get('/benefits/types');
+    const { data } = await http.get("/benefits/types");
     types.value = data.types || [];
   } catch (_err) {
     types.value = [];
@@ -168,7 +180,7 @@ async function fetchTypes() {
 // needed. Only superadmins and staff may call this endpoint.
 async function fetchBudgets() {
   try {
-    const { data } = await http.get('/benefits/budgets');
+    const { data } = await http.get("/benefits/budgets");
     budgets.value = data.budgets || [];
   } catch (_err) {
     budgets.value = [];
@@ -188,18 +200,18 @@ async function submitTopup() {
     if (selectedEmployees.value.length === 1) {
       // Single employee top‑up uses the existing endpoint
       body.employeeCode = selectedEmployees.value[0];
-      url = '/benefits/topup';
+      url = "/benefits/topup";
     } else {
       // Multiple employees top‑up uses the bulk endpoint
       body.employeeCodes = selectedEmployees.value;
-      url = '/benefits/topup-bulk';
+      url = "/benefits/topup-bulk";
     }
     await http.post(url, body);
-    alert('ปรับวงเงินเรียบร้อย');
+    alert("ปรับวงเงินเรียบร้อย");
     // Reload budgets to reflect the new limit and remaining values.
     await fetchBudgets();
   } catch (err) {
-    const msg = err?.response?.data?.message || 'ไม่สามารถปรับวงเงินได้';
+    const msg = err?.response?.data?.message || "ไม่สามารถปรับวงเงินได้";
     alert(msg);
   }
   selectedEmployees.value = [];

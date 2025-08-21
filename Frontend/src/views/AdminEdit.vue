@@ -31,19 +31,43 @@
           <p>ใช้ไปแล้ว: {{ budget.used }} บาท</p>
           <p>คงเหลือ: {{ remaining }} บาท</p>
           <v-divider :thickness="1" color="success" class="my-4"></v-divider>
-          <v-text-field
-            v-model.number="amount"
-            label="จำนวนเงินที่ต้องการเบิก"
-            type="number"
-            :rules="[(v) => v <= remaining || 'เกินวงเงิน']"
-          />
-          <v-select
-            v-model="selectedClaimFor"
-            :items="claimFor"
-            label="เบิกให้กับ"
-            :disabled="!selectedType"
-            clearable
-          ></v-select>
+
+          <v-row>
+            <v-col cols="12" sm="4">
+              <v-text-field
+                v-model.number="amount"
+                label="จำนวนเงินที่ต้องการเบิก"
+                type="number"
+                :rules="[(v) => v <= remaining || 'เกินวงเงิน']"
+              />
+              <v-col v-if="amount" class="py-0 px-0">
+                <p class="text-error">เบิกครั้งนี้: {{ amount }} บาท</p>
+                <p class="text-warning">
+                  ยอดคงเหลือหลังเบิก: {{ remaining - amount }} บาท
+                </p>
+              </v-col>
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-select
+                v-model="selectedClaimFor"
+                :items="claimFor"
+                label="เบิกให้กับ"
+                :disabled="!selectedType"
+                clearable
+              ></v-select>
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-select
+                v-model="selectedClaimtype"
+                :items="filteredClaimTypes"
+                item-title="name"
+                item-value="id"
+                label="รายการเบิกตามบัญชี"
+                :disabled="!selectedEmployee"
+                clearable
+              />
+            </v-col>
+          </v-row>
           <!-- Description input for the claim -->
           <v-text-field
             v-model="description"
@@ -81,6 +105,9 @@ const employees = ref([]);
 // List of welfare types fetched from the API.
 const types = ref([]);
 
+// List of claim types fetched from the API.
+const claimtypes = ref([]);
+
 // Defined list of Claim for who ?
 const claimFor = ref(["ตนเอง", "บิดา", "มารดา", "บุตร"]);
 
@@ -98,11 +125,24 @@ const filteredTypes = computed(() => {
   }
   return [];
 });
+const filteredClaimTypes = computed(() => {
+  const user = currentUser.value;
+  // Return all types if no user (should not happen) or if superadmin
+  if (!user) return claimtypes.value;
+  const roles = Array.isArray(user.roles) ? user.roles : [user.role];
+  if (roles.includes("superadmin")) return claimtypes.value;
+  if (roles.includes("staff")) {
+    const assignments = user.staffAssignments || [];
+    return claimtypes.value.filter((t) => assignments.includes(t.id));
+  }
+  return [];
+});
 
 // Selected employee code and welfare type id.
 const selectedEmployee = ref("");
 const selectedType = ref(null);
 const selectedClaimFor = ref(null);
+const selectedClaimtype = ref(null);
 
 // Amount the admin wants to claim for the selected employee/type.
 const amount = ref(0);
@@ -165,6 +205,15 @@ async function fetchTypes() {
     types.value = [];
   }
 }
+// Fetch the list of welfare types from the API.
+async function fetchClaimTypes() {
+  try {
+    const { data } = await http.get("/benefits/claimtypes");
+    claimtypes.value = data.claimtypes || [];
+  } catch (_err) {
+    claimtypes.value = [];
+  }
+}
 
 // Fetch the balances for the selected employee. If no employee is
 // selected, clear the balances list. Errors are silently swallowed.
@@ -188,6 +237,7 @@ async function fetchBalances() {
 // employees.
 watch(selectedEmployee, () => {
   selectedType.value = null;
+  selectedClaimtype.value = null;
   amount.value = 0;
   fetchBalances();
 });
@@ -196,6 +246,7 @@ watch(selectedEmployee, () => {
 onMounted(() => {
   fetchEmployees();
   fetchTypes();
+  fetchClaimTypes();
 });
 
 // Submit the claim via the API. Only runs if canSubmit is true. On
@@ -210,7 +261,10 @@ async function submitClaim() {
       typeId: selectedType.value,
       amount: amount.value,
       claimfor: selectedClaimFor.value,
+      claimtype: selectedClaimtype.value,
       description: description.value,
+      balance_after_witdraw: remaining.value - amount.value,
+      total_witdraw_history: budget.value.used,
     });
     alert("บันทึกการเบิกเรียบร้อย");
     amount.value = 0;
